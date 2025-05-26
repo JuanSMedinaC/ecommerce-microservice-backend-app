@@ -2,7 +2,7 @@ pipeline {
     // Usa un agente con Docker y Kubectl. 'docker && k8s' son etiquetas
     // que deberías haber puesto en tu agente configurado. Si no, usa 'agent any'
     // pero asegúrate de que tiene Docker y kubectl.
-    agent { label 'docker && k8s' }
+    agent any
 
     environment {
         DOCKERHUB_USERNAME = 'juansmc' // Reemplaza con tu nombre de usuario de Docker Hub
