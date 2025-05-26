@@ -6,18 +6,18 @@ pipeline {
 
     environment {
         DOCKERHUB_USERNAME = 'juansmc' // Reemplaza con tu nombre de usuario de Docker Hub
-        
+
         // Use SERVICE_NAME consistently for the microservice being deployed
-        SERVICE_NAME = 'api-gateway' 
-        
+        SERVICE_NAME = 'api-gateway'
+
         IMAGE_NAME = "${DOCKERHUB_USERNAME}/api-gateway-ecommerce-boot" // Tu nombre de imagen
         IMAGE_TAG = "dev-${env.BUILD_NUMBER}" // Etiqueta dinámica: dev-<numero_build>
         KUBE_NAMESPACE = 'development'
         DOCKER_CREDENTIALS_ID = 'dockerhub-creds'
-        
+
         // This is the crucial part for the path:
         KUBE_MANIFESTS_DIR = 'k8s' // Path from the project root to your k8s directory
-        
+
         // Construct the full paths to the specific Kubernetes files
         KUBE_DEPLOYMENT_FILE = "${KUBE_MANIFESTS_DIR}/${SERVICE_NAME}-container-deployment.yaml"
         // Assuming your service.yml is also in the k8s directory
@@ -33,7 +33,7 @@ pipeline {
             }
         }
 
-        stage('2. Build & Package') {
+        stage('2. Build & Package 🛠️') {
             steps {
                 echo "Construyendo el proyecto ${env.SERVICE_NAME} con Maven..."
                 // Assuming your pom.xml for api-gateway is in the 'api-gateway' subdirectory
@@ -44,44 +44,43 @@ pipeline {
             }
         }
 
-        stage('3. Build & Push Docker Image') {
+        stage('3. Build & Push Docker Image 🐳') {
             steps {
-                echo "Construyendo y subiendo la imagen: ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
-                // Usamos docker.withRegistry para manejar login/logout automáticamente
-                docker.withRegistry('https://registry.hub.docker.com', env.DOCKER_CREDENTIALS_ID) {
-                    // Build the image from the service directory where the Dockerfile should be
-                    // Assuming Dockerfile is at api-gateway/Dockerfile
-                    def customImage = docker.build("${env.IMAGE_NAME}:${env.IMAGE_TAG}", "-f ${env.SERVICE_NAME}/Dockerfile ${env.SERVICE_NAME}")
-                    // Alternatively, if Dockerfile is directly in 'api-gateway':
-                    // def customImage = docker.build("${env.IMAGE_NAME}:${env.IMAGE_TAG}", "${env.SERVICE_NAME}")
-                    
-                    // Sube la imagen (push)
-                    customImage.push()
-                }
-                echo "Imagen subida exitosamente."
+                // *** FIX: Wrap the docker.withRegistry block in a script block ***
+                script { // <--- ADD THIS LINE
+                    echo "Construyendo y subiendo la imagen: ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
+                    // Usamos docker.withRegistry para manejar login/logout automáticamente
+                    docker.withRegistry('https://registry.hub.docker.com', env.DOCKER_CREDENTIALS_ID) {
+                        // Build the image from the service directory where the Dockerfile should be
+                        // Assuming Dockerfile is at api-gateway/Dockerfile
+                        def customImage = docker.build("${env.IMAGE_NAME}:${env.IMAGE_TAG}", "-f ${env.SERVICE_NAME}/Dockerfile ${env.SERVICE_NAME}")
+
+                        // Sube la imagen (push)
+                        customImage.push()
+                    }
+                    echo "Imagen subida exitosamente."
+                } // <--- AND THIS LINE
             }
         }
 
         stage('4. Update K8s Manifests') {
             steps {
                 echo "Actualizando la imagen en ${env.KUBE_DEPLOYMENT_FILE}..."
-                // Usa sed para reemplazar la imagen. ¡Asegúrate de que la ruta sea correcta!
-                // Este comando busca 'image:' y reemplaza toda la línea.
+                // 'sh' commands are generally allowed directly, but if you have
+                // any complex Groovy logic here, it might also need a 'script' block.
                 sh "sed -i 's|image: .*|image: ${env.IMAGE_NAME}:${env.IMAGE_TAG}|g' ${env.KUBE_DEPLOYMENT_FILE}"
                 echo "Manifest actualizado:"
                 sh "cat ${env.KUBE_DEPLOYMENT_FILE}"
             }
         }
 
-        stage('5. Deploy to Dev K8s') {
+        stage('5. Deploy to Dev K8s 🚀') {
             steps {
                 echo "Desplegando ${env.SERVICE_NAME} en Kubernetes (Namespace: ${env.KUBE_NAMESPACE})..."
-                // Aquí usamos kubectl. Asegúrate de que las credenciales de K8s
-                // estén disponibles en el agente (vía kubeconfig montado o plugin)
+                // 'sh' commands are generally allowed directly.
                 sh "kubectl apply -f ${env.KUBE_SERVICE_FILE} -n ${env.KUBE_NAMESPACE}"
                 sh "kubectl apply -f ${env.KUBE_DEPLOYMENT_FILE} -n ${env.KUBE_NAMESPACE}"
                 echo "Esperando que el despliegue se complete..."
-                // Ajusta el nombre del deployment si es diferente
                 sh "kubectl rollout status deployment/${env.SERVICE_NAME}-container -n ${env.KUBE_NAMESPACE} --timeout=120s"
                 echo "¡Despliegue completado!"
             }
