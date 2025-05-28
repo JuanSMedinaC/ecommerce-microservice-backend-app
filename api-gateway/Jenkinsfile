@@ -1,11 +1,16 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'maven:3.8.5-openjdk-17'
+            args '-v /root/.m2:/root/.m2' // Cache local de dependencias Maven
+        }
+    }
 
     environment {
         DOCKERHUB_USERNAME = 'juansmc'
         SERVICE_NAME = 'api-gateway'
         IMAGE_NAME = "${DOCKERHUB_USERNAME}/api-gateway-ecommerce-boot"
-        IMAGE_TAG = "${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
+        IMAGE_TAG = "dev-${env.BUILD_NUMBER}"
         KUBE_NAMESPACE = 'development'
         DOCKER_CREDENTIALS_ID = 'dockerhub-creds'
         KUBE_MANIFESTS_DIR = 'k8s'
@@ -24,8 +29,8 @@ pipeline {
 
         stage('2. Maven Build & Test') {
             steps {
-                script {
-                    dir("${env.SERVICE_NAME}") {
+                dir("${env.SERVICE_NAME}") {
+                    script {
                         if (env.BRANCH_NAME == 'stage') {
                             echo "Ejecutando build con tests para stage..."
                             sh 'mvn clean verify'
@@ -41,57 +46,46 @@ pipeline {
         stage('3. Build & Push Docker Image') {
             steps {
                 script {
-                    echo "Construyendo y subiendo la imagen: ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
                     docker.withRegistry('https://registry.hub.docker.com', env.DOCKER_CREDENTIALS_ID) {
                         dir("${env.SERVICE_NAME}") {
                             def customImage = docker.build("${env.IMAGE_NAME}:${env.IMAGE_TAG}", ".")
                             customImage.push()
                         }
                     }
-                    echo "Imagen subida exitosamente."
+                    echo "Imagen Docker subida exitosamente: ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
                 }
             }
         }
 
         stage('4. Update K8s Manifests') {
-            when {
-                anyOf {
-                    branch 'dev'
-                    branch 'stage'
-                }
-            }
             steps {
-                echo "Actualizando la imagen en ${env.KUBE_DEPLOYMENT_FILE}..."
+                echo "Actualizando el manifiesto de despliegue..."
                 sh "sed -i 's|image: .*|image: ${env.IMAGE_NAME}:${env.IMAGE_TAG}|g' ${env.KUBE_DEPLOYMENT_FILE}"
-                echo "Manifest actualizado:"
                 sh "cat ${env.KUBE_DEPLOYMENT_FILE}"
             }
         }
 
         stage('5. Deploy to Dev K8s') {
-            when {
-                branch 'dev'
-            }
             steps {
-                echo "Desplegando ${env.SERVICE_NAME} en Kubernetes (Namespace: ${env.KUBE_NAMESPACE})..."
+                echo "Desplegando en Kubernetes (namespace: ${env.KUBE_NAMESPACE})..."
                 sh "kubectl apply -f ${env.KUBE_SERVICE_FILE} -n ${env.KUBE_NAMESPACE}"
                 sh "kubectl apply -f ${env.KUBE_DEPLOYMENT_FILE} -n ${env.KUBE_NAMESPACE}"
                 sh "kubectl rollout status deployment/${env.SERVICE_NAME}-container -n ${env.KUBE_NAMESPACE} --timeout=120s"
-                echo "¡Despliegue completado!"
+                echo "¡Despliegue exitoso!"
             }
         }
     }
 
     post {
         always {
-            echo 'Limpiando el workspace...'
+            echo 'Limpiando workspace...'
             cleanWs()
         }
         success {
-            echo '¡El pipeline se ejecutó exitosamente!'
+            echo 'Pipeline completado exitosamente.'
         }
         failure {
-            echo '¡El pipeline falló!'
+            echo 'El pipeline falló.'
         }
     }
 }
