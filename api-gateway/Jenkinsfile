@@ -1,12 +1,11 @@
 pipeline {
-    // Agent still needs Docker and Kubectl installed and configured with these labels.
     agent any
 
     environment {
         DOCKERHUB_USERNAME = 'juansmc'
         SERVICE_NAME = 'api-gateway'
         IMAGE_NAME = "${DOCKERHUB_USERNAME}/api-gateway-ecommerce-boot"
-        IMAGE_TAG = "dev-${env.BUILD_NUMBER}"
+        IMAGE_TAG = "${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
         KUBE_NAMESPACE = 'development'
         DOCKER_CREDENTIALS_ID = 'dockerhub-creds'
         KUBE_MANIFESTS_DIR = 'k8s'
@@ -23,20 +22,28 @@ pipeline {
             }
         }
 
-        // --- Removed the separate Maven build stage ---
-        // Your Dockerfile will handle the Maven build internally.
-        // The Docker build context should point to the 'api-gateway' directory.
+        stage('2. Maven Build & Test') {
+            steps {
+                script {
+                    dir("${env.SERVICE_NAME}") {
+                        if (env.BRANCH_NAME == 'stage') {
+                            echo "Ejecutando build con tests para stage..."
+                            sh 'mvn clean verify'
+                        } else {
+                            echo "Ejecutando build sin tests para dev..."
+                            sh 'mvn clean package -DskipTests'
+                        }
+                    }
+                }
+            }
+        }
 
-        stage('2. Build & Push Docker Image 🐳') { // This stage now handles both application build and Docker image build
+        stage('3. Build & Push Docker Image') {
             steps {
                 script {
                     echo "Construyendo y subiendo la imagen: ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
                     docker.withRegistry('https://registry.hub.docker.com', env.DOCKER_CREDENTIALS_ID) {
-                        // Build the image using the Dockerfile located in the service directory.
-                        // The build context '.' will be the 'api-gateway' directory itself.
-                        // Jenkins automatically handles copying the relevant files for the build context.
-                        // Assuming your Dockerfile is named 'Dockerfile' within the 'api-gateway' directory.
-                        dir("${env.SERVICE_NAME}") { // Navigate into the service directory to build the Docker image
+                        dir("${env.SERVICE_NAME}") {
                             def customImage = docker.build("${env.IMAGE_NAME}:${env.IMAGE_TAG}", ".")
                             customImage.push()
                         }
@@ -46,7 +53,13 @@ pipeline {
             }
         }
 
-        stage('3. Update K8s Manifests') { // Renumbered stages after removing one
+        stage('4. Update K8s Manifests') {
+            when {
+                anyOf {
+                    branch 'dev'
+                    branch 'stage'
+                }
+            }
             steps {
                 echo "Actualizando la imagen en ${env.KUBE_DEPLOYMENT_FILE}..."
                 sh "sed -i 's|image: .*|image: ${env.IMAGE_NAME}:${env.IMAGE_TAG}|g' ${env.KUBE_DEPLOYMENT_FILE}"
@@ -55,12 +68,14 @@ pipeline {
             }
         }
 
-        stage('4. Deploy to Dev K8s 🚀') { // Renumbered stages
+        stage('5. Deploy to Dev K8s') {
+            when {
+                branch 'dev'
+            }
             steps {
                 echo "Desplegando ${env.SERVICE_NAME} en Kubernetes (Namespace: ${env.KUBE_NAMESPACE})..."
                 sh "kubectl apply -f ${env.KUBE_SERVICE_FILE} -n ${env.KUBE_NAMESPACE}"
                 sh "kubectl apply -f ${env.KUBE_DEPLOYMENT_FILE} -n ${env.KUBE_NAMESPACE}"
-                echo "Esperando que el despliegue se complete..."
                 sh "kubectl rollout status deployment/${env.SERVICE_NAME}-container -n ${env.KUBE_NAMESPACE} --timeout=120s"
                 echo "¡Despliegue completado!"
             }
