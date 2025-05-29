@@ -101,12 +101,13 @@ pipeline {
             steps {
                 script {
                     def ns = env.KUBE_NAMESPACE
-                    def exists = sh(script: "kubectl get ns ${ns} --ignore-not-found", returnStatus: true) == 0
-                    if (!exists) {
+                    def output = sh(script: "kubectl get ns ${ns} --ignore-not-found", returnStdout: true).trim()
+
+                    if (output) {
+                        echo "Namespace '${ns}' ya existe."
+                    } else {
                         echo "Namespace '${ns}' no existe. Creándolo..."
                         sh "kubectl create namespace ${ns}"
-                    } else {
-                        echo "Namespace '${ns}' ya existe."
                     }
                 }
             }
