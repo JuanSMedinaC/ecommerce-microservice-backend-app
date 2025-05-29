@@ -6,7 +6,6 @@ pipeline {
         DOCKER_CREDENTIALS_ID = 'dockerhub-creds'
         KUBE_NAMESPACE = 'development'
         KUBE_MANIFESTS_DIR = 'k8s'
-        SERVICES = ['api-gateway', 'user-service', 'cloud-config', 'order-service', 'payment-service', 'shipping-service', 'product-service', 'service-discovery', 'favourite-service']
     }
 
     stages {
@@ -18,33 +17,24 @@ pipeline {
             }
         }
 
-        stage('2. Build, Test, Docker & Push') {
+        stage('2. Build & Test') {
             steps {
                 script {
+                    def SERVICES = [
+                        'api-gateway', 'user-service', 'cloud-config', 'order-service',
+                        'payment-service', 'shipping-service', 'product-service',
+                        'service-discovery', 'favourite-service'
+                    ]
+
                     SERVICES.each { service ->
                         def buildPath = "${service}/pom.xml"
                         if (fileExists(buildPath)) {
-                            def imageName = "${DOCKERHUB_USERNAME}/${service}-ecommerce-boot"
-                            def imageTag = "${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
-
-                            echo "=== Procesando ${service} ==="
-
+                            echo "🔨 Compilando y testeando ${service}..."
                             dir(service) {
                                 if (env.BRANCH_NAME == 'stage') {
                                     sh 'mvn clean verify'
                                 } else {
                                     sh 'mvn clean package -DskipTests'
-                                }
-
-                                docker.withRegistry('https://registry.hub.docker.com', DOCKER_CREDENTIALS_ID) {
-                                    def customImage = docker.build("${imageName}:${imageTag}", ".")
-                                    customImage.push()
-                                }
-
-                                // Actualizar manifiestos
-                                def deploymentFile = "${env.WORKSPACE}/${KUBE_MANIFESTS_DIR}/${service}-container-deployment.yaml"
-                                if (fileExists(deploymentFile)) {
-                                    sh "sed -i 's|image: .*|image: ${imageName}:${imageTag}|g' ${deploymentFile}"
                                 }
                             }
                         } else {
@@ -55,21 +45,78 @@ pipeline {
             }
         }
 
-        stage('3. Deploy to K8s') {
+        stage('3. Docker Build & Push') {
+            steps {
+                script {
+                    def SERVICES = [
+                        'api-gateway', 'user-service', 'cloud-config', 'order-service',
+                        'payment-service', 'shipping-service', 'product-service',
+                        'service-discovery', 'favourite-service'
+                    ]
+
+                    docker.withRegistry('https://registry.hub.docker.com', env.DOCKER_CREDENTIALS_ID) {
+                        SERVICES.each { service ->
+                            def buildPath = "${service}/pom.xml"
+                            if (fileExists(buildPath)) {
+                                def imageName = "${env.DOCKERHUB_USERNAME}/${service}-ecommerce-boot"
+                                def imageTag = "${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
+
+                                echo "Construyendo imagen Docker para ${service}..."
+                                dir(service) {
+                                    def image = docker.build("${imageName}:${imageTag}")
+                                    image.push()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('4. Actualizar manifiestos de Kubernetes') {
+            steps {
+                script {
+                    def SERVICES = [
+                        'api-gateway', 'user-service', 'cloud-config', 'order-service',
+                        'payment-service', 'shipping-service', 'product-service',
+                        'service-discovery', 'favourite-service'
+                    ]
+
+                    SERVICES.each { service ->
+                        def deploymentFile = "${env.WORKSPACE}/${env.KUBE_MANIFESTS_DIR}/${service}-container-deployment.yaml"
+                        def imageName = "${env.DOCKERHUB_USERNAME}/${service}-ecommerce-boot"
+                        def imageTag = "${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
+
+                        if (fileExists(deploymentFile)) {
+                            echo "Actualizando manifiesto de ${service}..."
+                            sh "sed -i 's|image: .*|image: ${imageName}:${imageTag}|g' ${deploymentFile}"
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('5. Deploy a Kubernetes') {
             when {
                 branch 'develop'
             }
             steps {
                 script {
+                    def SERVICES = [
+                        'api-gateway', 'user-service', 'cloud-config', 'order-service',
+                        'payment-service', 'shipping-service', 'product-service',
+                        'service-discovery', 'favourite-service'
+                    ]
+
                     SERVICES.each { service ->
-                        def svcFile = "${KUBE_MANIFESTS_DIR}/${service}-service.yaml"
-                        def depFile = "${KUBE_MANIFESTS_DIR}/${service}-container-deployment.yaml"
+                        def svcFile = "${env.KUBE_MANIFESTS_DIR}/${service}-service.yaml"
+                        def depFile = "${env.KUBE_MANIFESTS_DIR}/${service}-container-deployment.yaml"
 
                         if (fileExists(svcFile) && fileExists(depFile)) {
                             echo "Desplegando ${service}..."
-                            sh "kubectl apply -f ${svcFile} -n ${KUBE_NAMESPACE}"
-                            sh "kubectl apply -f ${depFile} -n ${KUBE_NAMESPACE}"
-                            sh "kubectl rollout status deployment/${service}-container -n ${KUBE_NAMESPACE} --timeout=120s"
+                            sh "kubectl apply -f ${svcFile} -n ${env.KUBE_NAMESPACE}"
+                            sh "kubectl apply -f ${depFile} -n ${env.KUBE_NAMESPACE}"
+                            sh "kubectl rollout status deployment/${service}-container -n ${env.KUBE_NAMESPACE} --timeout=120s"
                         }
                     }
                 }
@@ -79,7 +126,7 @@ pipeline {
 
     post {
         always {
-            echo '🧹 Limpiando el workspace...'
+            echo 'Limpiando el workspace...'
             cleanWs()
         }
         success {
