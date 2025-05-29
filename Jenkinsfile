@@ -29,7 +29,7 @@ pipeline {
                     SERVICES.each { service ->
                         def buildPath = "${service}/pom.xml"
                         if (fileExists(buildPath)) {
-                            echo "🔨 Compilando y testeando ${service}..."
+                            echo "Compilando y testeando ${service}..."
                             dir(service) {
                                 if (env.BRANCH_NAME == 'stage') {
                                     sh 'mvn clean verify'
@@ -90,11 +90,28 @@ pipeline {
                         if (fileExists(deploymentFile)) {
                             echo "Actualizando manifiesto de ${service}..."
                             sh "sed -i 's|image: .*|image: ${imageName}:${imageTag}|g' ${deploymentFile}"
+                            sh "cat ${deploymentFile}" 
                         }
                     }
                 }
             }
         }
+        
+        stage('4.5 Crear Namespace si no existe') {
+            steps {
+                script {
+                    def ns = env.KUBE_NAMESPACE
+                    def exists = sh(script: "kubectl get ns ${ns} --ignore-not-found", returnStatus: true) == 0
+                    if (!exists) {
+                        echo "Namespace '${ns}' no existe. Creándolo..."
+                        sh "kubectl create namespace ${ns}"
+                    } else {
+                        echo "Namespace '${ns}' ya existe."
+                    }
+                }
+            }
+        }
+
 
         stage('5. Deploy a Kubernetes') {
             when {
