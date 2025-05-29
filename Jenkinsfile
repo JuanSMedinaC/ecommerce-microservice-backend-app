@@ -115,9 +115,6 @@ pipeline {
 
 
         stage('5. Deploy a Kubernetes') {
-            when {
-                branch 'develop'
-            }
             steps {
                 script {
                     def SERVICES = [
@@ -131,6 +128,9 @@ pipeline {
                         def depFile = "${env.WORKSPACE}/${env.KUBE_MANIFESTS_DIR}/${service}/${service}-container-deployment.yaml"
 
                         if (fileExists(svcFile) && fileExists(depFile)) {
+                            sh "cat ${svcFile}"
+                            sh "cat ${depFile}"
+
                             echo "Desplegando ${service}..."
                             sh "kubectl apply -f ${svcFile} -n ${env.KUBE_NAMESPACE}"
                             sh "kubectl apply -f ${depFile} -n ${env.KUBE_NAMESPACE}"
