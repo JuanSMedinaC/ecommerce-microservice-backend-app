@@ -127,8 +127,8 @@ pipeline {
                     ]
 
                     SERVICES.each { service ->
-                        def svcFile = "${env.KUBE_MANIFESTS_DIR}/${service}/${service}-service.yaml"
-                        def depFile = "${env.KUBE_MANIFESTS_DIR}/${service}/${service}-container-deployment.yaml"
+                        def svcFile = "${env.WORKSPACE}/${env.KUBE_MANIFESTS_DIR}/${service}/${service}-service.yaml"
+                        def depFile = "${env.WORKSPACE}/${env.KUBE_MANIFESTS_DIR}/${service}/${service}-container-deployment.yaml"
 
                         if (fileExists(svcFile) && fileExists(depFile)) {
                             echo "Desplegando ${service}..."
