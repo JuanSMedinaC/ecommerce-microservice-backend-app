@@ -83,7 +83,7 @@ pipeline {
                     ]
 
                     SERVICES.each { service ->
-                        def deploymentFile = "${env.WORKSPACE}/${env.KUBE_MANIFESTS_DIR}/${service}-container-deployment.yaml"
+                        def deploymentFile = "${env.WORKSPACE}/${env.KUBE_MANIFESTS_DIR}/${service}/${service}-container-deployment.yaml"
                         def imageName = "${env.DOCKERHUB_USERNAME}/${service}-ecommerce-boot"
                         def imageTag = "${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
 
@@ -127,8 +127,8 @@ pipeline {
                     ]
 
                     SERVICES.each { service ->
-                        def svcFile = "${env.KUBE_MANIFESTS_DIR}/${service}-service.yaml"
-                        def depFile = "${env.KUBE_MANIFESTS_DIR}/${service}-container-deployment.yaml"
+                        def svcFile = "${env.KUBE_MANIFESTS_DIR}/${service}/${service}-service.yaml"
+                        def depFile = "${env.KUBE_MANIFESTS_DIR}/${service}/${service}-container-deployment.yaml"
 
                         if (fileExists(svcFile) && fileExists(depFile)) {
                             echo "Desplegando ${service}..."
