@@ -125,7 +125,7 @@ pipeline {
 
                     SERVICES.each { service ->
                         sh "ls -la ${KUBE_MANIFESTS_DIR}/${service}"
-                        def svcFile = "${KUBE_MANIFESTS_DIR}/${service}/${service}-service.yaml"
+                        def svcFile = "${KUBE_MANIFESTS_DIR}/${service}/${service}-container-service.yaml"
                         def depFile = "${KUBE_MANIFESTS_DIR}/${service}/${service}-container-deployment.yaml"
                 
                         echo "✔ Archivos encontrados para ${service}"
