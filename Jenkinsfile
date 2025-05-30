@@ -126,25 +126,15 @@ pipeline {
                     SERVICES.each { service ->
                         def svcFile = "${KUBE_MANIFESTS_DIR}/${service}/${service}-service.yaml"
                         def depFile = "${KUBE_MANIFESTS_DIR}/${service}/${service}-container-deployment.yaml"
+                
+                        echo "✔ Archivos encontrados para ${service}"
+                        sh "cat ${svcFile}"
+                        sh "cat ${depFile}"
 
-                        // Debug: mostrar archivos en el directorio actual
-                        echo "Revisando manifiestos para ${service}..."
-                        sh "ls -la ${KUBE_MANIFESTS_DIR}/${service} || true"
-
-                        if (fileExists(svcFile) && fileExists(depFile)) {
-                            echo "✔ Archivos encontrados para ${service}"
-                            sh "cat ${svcFile}"
-                            sh "cat ${depFile}"
-
-                            echo "🚀 Desplegando ${service}..."
-                            sh "kubectl apply -f ${svcFile} -n ${KUBE_NAMESPACE}"
-                            sh "kubectl apply -f ${depFile} -n ${KUBE_NAMESPACE}"
-                            sh "kubectl rollout status deployment/${service}-container -n ${KUBE_NAMESPACE} --timeout=120s"
-                        } else {
-                            echo "⚠ Archivos no encontrados para ${service}:"
-                            if (!fileExists(svcFile)) echo "❌ Falta: ${svcFile}"
-                            if (!fileExists(depFile)) echo "❌ Falta: ${depFile}"
-                        }
+                        echo "🚀 Desplegando ${service}..."
+                        sh "kubectl apply -f ${svcFile} -n ${KUBE_NAMESPACE}"
+                        sh "kubectl apply -f ${depFile} -n ${KUBE_NAMESPACE}"
+                        sh "kubectl rollout status deployment/${service}-container -n ${KUBE_NAMESPACE} --timeout=120s"
                     }
                 }
             }
