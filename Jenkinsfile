@@ -124,8 +124,8 @@ pipeline {
                     ]
 
                     SERVICES.each { service ->
-                        def svcFile = "${KUBE_MANIFESTS_DIR}/${service}/${service}-service.yaml"
-                        def depFile = "${KUBE_MANIFESTS_DIR}/${service}/${service}-container-deployment.yaml"
+                        def svcFile = "${env.WORKSPACE}/${KUBE_MANIFESTS_DIR}/${service}/${service}-service.yaml"
+                        def depFile = "${env.WORKSPACE}/${KUBE_MANIFESTS_DIR}/${service}/${service}-container-deployment.yaml"
                 
                         echo "✔ Archivos encontrados para ${service}"
                         sh "cat ${svcFile}"
