@@ -1,0 +1,44 @@
+// This Jenkinsfile defines a test pipeline to build and push a Docker image
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "juansmc/prueba-jenkins-docker"
+        TAG = "latest"
+    }
+
+    stages {
+        stage('Check Docker') {
+            steps {
+                sh 'docker --version'
+                sh 'docker ps'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    writeFile file: 'Dockerfile', text: '''
+                    FROM alpine:3.18
+                    CMD ["echo", "¡Docker funciona en Jenkins!"]
+                    '''
+                }
+                sh 'docker build -t $IMAGE_NAME:$TAG .'
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            when {
+                expression { return env.DOCKERHUB_USER && env.DOCKERHUB_PASS }
+            }
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKERHUB_USER', passwordVariable: 'DOCKERHUB_PASS')]) {
+                    sh """
+                        echo $DOCKERHUB_PASS | docker login -u $DOCKERHUB_USER --password-stdin
+                        docker push $IMAGE_NAME:$TAG
+                    """
+                }
+            }
+        }
+    }
+}
