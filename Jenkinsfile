@@ -4,11 +4,26 @@ pipeline {
     environment {
         DOCKERHUB_USERNAME = 'juansmc'
         DOCKER_CREDENTIALS_ID = 'dockerhub-creds'
-        KUBE_NAMESPACE = 'development'
+        KUBE_NAMESPACE = ''
         KUBE_MANIFESTS_DIR = 'k8s'
     }
 
     stages {
+        stage('0. Configuración del Entorno') {
+            steps {
+                script {
+                    if (env.BRANCH_NAME == 'master') {
+                        env.KUBE_NAMESPACE = 'prod'
+                    } else if (env.BRANCH_NAME == 'stage') {
+                        env.KUBE_NAMESPACE = 'stage'
+                    } else {
+                        env.KUBE_NAMESPACE = "dev-${env.BRANCH_NAME}"
+                    }
+                    echo "Namespace asignado: ${env.KUBE_NAMESPACE}"
+                }
+            }
+        }
+
         stage('1. Checkout') {
             steps {
                 echo "Clonando el repositorio..."
@@ -23,7 +38,7 @@ pipeline {
                     def SERVICES = [
                         'api-gateway', 'user-service', 'cloud-config', 'order-service',
                         'payment-service', 'shipping-service', 'product-service',
-                        'service-discovery', 'favourite-service'
+                        'service-discovery', 'favourite-service, proxy-client'
                     ]
 
                     SERVICES.each { service ->
@@ -31,7 +46,7 @@ pipeline {
                         if (fileExists(buildPath)) {
                             echo "Compilando y testeando ${service}..."
                             dir(service) {
-                                if (env.BRANCH_NAME == 'stage') {
+                                if (env.BRANCH_NAME == 'stage' || env.BRANCH_NAME == 'master') {
                                     sh 'mvn clean verify'
                                 } else {
                                     sh 'mvn clean package -DskipTests'
@@ -51,7 +66,7 @@ pipeline {
                     def SERVICES = [
                         'api-gateway', 'user-service', 'cloud-config', 'order-service',
                         'payment-service', 'shipping-service', 'product-service',
-                        'service-discovery', 'favourite-service'
+                        'service-discovery', 'favourite-service, proxy-client'
                     ]
 
                     docker.withRegistry('https://registry.hub.docker.com', env.DOCKER_CREDENTIALS_ID) {
@@ -59,9 +74,9 @@ pipeline {
                             def buildPath = "${service}/pom.xml"
                             if (fileExists(buildPath)) {
                                 def imageName = "${env.DOCKERHUB_USERNAME}/${service}-ecommerce-boot"
-                                def imageTag = "${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
+                                def imageTag = (env.BRANCH_NAME == 'master') ? 'prod' : "${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
 
-                                echo "Construyendo imagen Docker para ${service}..."
+                                echo "Construyendo imagen Docker para ${service} con tag ${imageTag}..."
                                 dir(service) {
                                     def image = docker.build("${imageName}:${imageTag}")
                                     image.push()
@@ -79,24 +94,24 @@ pipeline {
                     def SERVICES = [
                         'api-gateway', 'user-service', 'cloud-config', 'order-service',
                         'payment-service', 'shipping-service', 'product-service',
-                        'service-discovery', 'favourite-service'
+                        'service-discovery', 'favourite-service, proxy-client'
                     ]
 
                     SERVICES.each { service ->
                         def deploymentFile = "${env.WORKSPACE}/${env.KUBE_MANIFESTS_DIR}/${service}/${service}-container-deployment.yaml"
                         def imageName = "${env.DOCKERHUB_USERNAME}/${service}-ecommerce-boot"
-                        def imageTag = "${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
+                        def imageTag = (env.BRANCH_NAME == 'master') ? 'prod' : "${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
 
                         if (fileExists(deploymentFile)) {
                             echo "Actualizando manifiesto de ${service}..."
                             sh "sed -i 's|image: .*|image: ${imageName}:${imageTag}|g' ${deploymentFile}"
-                            sh "cat ${deploymentFile}" 
+                            sh "cat ${deploymentFile}"
                         }
                     }
                 }
             }
         }
-        
+
         stage('4.5 Crear Namespace si no existe') {
             steps {
                 script {
@@ -113,7 +128,6 @@ pipeline {
             }
         }
 
-
         stage('5. Deploy a Kubernetes') {
             steps {
                 script {
@@ -127,12 +141,14 @@ pipeline {
                         sh "ls -la ${KUBE_MANIFESTS_DIR}/${service}"
                         def svcFile = "${KUBE_MANIFESTS_DIR}/${service}/${service}-container-service.yaml"
                         def depFile = "${KUBE_MANIFESTS_DIR}/${service}/${service}-container-deployment.yaml"
-                
-                        echo "✔ Archivos encontrados para ${service}"
+                        if (!fileExists(svcFile) || !fileExists(depFile)) {
+                            error "Faltan archivos de manifiesto para ${service}. Asegúrate de que existan en el directorio ${KUBE_MANIFESTS_DIR}/${service}."
+                        }
+                        echo "Archivos encontrados para ${service}"
                         sh "cat ${svcFile}"
                         sh "cat ${depFile}"
 
-                        echo "🚀 Desplegando ${service}..."
+                        echo "Desplegando ${service} en namespace ${KUBE_NAMESPACE}..."
                         sh "kubectl apply -f ${svcFile} -n ${KUBE_NAMESPACE}"
                         sh "kubectl apply -f ${depFile} -n ${KUBE_NAMESPACE}"
                         sh "kubectl rollout status deployment/${service}-container -n ${KUBE_NAMESPACE} --timeout=120s"
