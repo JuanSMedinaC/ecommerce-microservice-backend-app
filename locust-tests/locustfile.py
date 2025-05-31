@@ -1,4 +1,5 @@
 from locust import HttpUser, task, between
+from datetime import datetime
 import random
 import uuid
 
@@ -10,53 +11,38 @@ class EcommerceUser(HttpUser):
             "categoryId": 1,
             "categoryTitle": "Default Category"
         }
+        self.last_product = None
+        self.username = "newname"
 
     def generate_product(self):
         return {
             "productTitle": "Book " + str(uuid.uuid4())[:6],
-            "priceUnit": 19.99,
+            "priceUnit": round(random.uniform(10, 100), 2),
             "sku": "SKU-" + str(random.randint(100, 999)),
-            "imageUrl": "https://example.com",
-            "quantity": random.randint(1, 5),
-            "categoryDto": self.category
+            "imageUrl": "https://example.com/image.jpg",
+            "quantity": random.randint(1, 10),
+            "category": self.category
         }
 
     @task(2)
     def list_products(self):
-        self.client.get("/api/products")
+        with self.client.get("/app/api/products", catch_response=True) as response:
+            if response.status_code != 200:
+                response.failure(f"Failed to list products: {response.status_code}")
 
-    @task(1)
+    @task(2)
     def create_product(self):
         product = self.generate_product()
-        response = self.client.post("/api/products", json=product)
-        if response.status_code == 200:
-            self.last_product = response.json()
+        with self.client.post("/app/api/products", json=product, catch_response=True) as response:
+            if response.status_code == 200:
+                self.last_product = response.json()
+            else:
+                response.failure(f"Failed to create product: {response.status_code} - {response.text}")
 
     @task(1)
     def get_product_by_id(self):
-        if hasattr(self, "last_product"):
+        if self.last_product:
             product_id = self.last_product.get("productId")
-            self.client.get(f"/api/products/{product_id}")
-
-    @task(1)
-    def update_product(self):
-        if hasattr(self, "last_product"):
-            product = self.last_product
-            product["productTitle"] = "Updated " + product["productTitle"]
-            self.client.put("/api/products", json=product)
-
-    @task(1)
-    def delete_product(self):
-        if hasattr(self, "last_product"):
-            product_id = self.last_product.get("productId")
-            self.client.delete(f"/api/products/{product_id}")
-
-    @task(1)
-    def create_order(self):
-        cart = {"userId": 1, "cartId": 1}
-        order = {
-            "orderDesc": "Locust load test order",
-            "orderFee": random.uniform(50, 200),
-            "cartDto": cart
-        }
-        self.client.post("/api/orders", json=order)
+            with self.client.get(f"/app/api/products/{product_id}", catch_response=True) as response:
+                if response.status_code != 200:
+                    response.failure(f"Failed to fetch product {product_id}: {response.status_code}")
