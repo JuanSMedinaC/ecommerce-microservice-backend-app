@@ -24,7 +24,7 @@ pipeline {
                     def SERVICES = [
                         'api-gateway', 'user-service', 'cloud-config', 'order-service',
                         'payment-service', 'shipping-service', 'product-service',
-                        'service-discovery', 'favourite-service'
+                        'service-discovery', 'favourite-service, proxy-client'
                     ]
 
                     SERVICES.each { service ->
@@ -53,7 +53,7 @@ pipeline {
                     def SERVICES = [
                         'api-gateway', 'user-service', 'cloud-config', 'order-service',
                         'payment-service', 'shipping-service', 'product-service',
-                        'service-discovery', 'favourite-service'
+                        'service-discovery', 'favourite-service, proxy-client'
                     ]
 
                     docker.withRegistry('https://registry.hub.docker.com', env.DOCKER_CREDENTIALS_ID) {
@@ -80,7 +80,7 @@ pipeline {
                     def SERVICES = [
                         'api-gateway', 'user-service', 'cloud-config', 'order-service',
                         'payment-service', 'shipping-service', 'product-service',
-                        'service-discovery', 'favourite-service'
+                        'service-discovery', 'favourite-service, proxy-client'
                     ]
 
                     SERVICES.each { service ->
@@ -125,7 +125,7 @@ pipeline {
                     def SERVICES = [
                         'api-gateway', 'user-service', 'cloud-config', 'order-service',
                         'payment-service', 'shipping-service', 'product-service',
-                        'service-discovery', 'favourite-service'
+                        'service-discovery', 'favourite-service, proxy-client'
                     ]
 
                     SERVICES.each { service ->
